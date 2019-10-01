@@ -197,6 +197,12 @@ namespace bftEngine
 			Timer* debugStatTimer = nullptr;
 			Timer* metricsTimer_;
 
+			//debugging
+			NodeIdType prevSenderId = 0;
+  			NodeIdType prevClientId = 0;
+  			ReqId prevReqSeqNum = 0;
+
+
 			int viewChangeTimerMilli;
 
 			std::shared_ptr<PersistentStorage> ps_;

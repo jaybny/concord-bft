@@ -254,10 +254,14 @@ void ReplicaImp::onMessage(ClientRequestMsg *m) {
   const bool readOnly = m->isReadOnly();
   const ReqId reqSeqNum = m->requestSeqNum();
 
-  LOG_INFO_F(GL, "Node %d received ClientRequestMsg (clientId=%d reqSeqNum=%"
-      PRIu64
-      ", readOnly=%d) from Node %d", myReplicaId, clientId, reqSeqNum, readOnly ? 1 : 0, senderId);
-
+  if ( prevSenderId != senderId && prevClientId != clientId && prevReqSeqNum != reqSeqNum) {
+    LOG_INFO_F(GL, "Node %d received ClientRequestMsg (clientId=%d reqSeqNum=%"
+        PRIu64
+        ", readOnly=%d) from Node %d", myReplicaId, clientId, reqSeqNum, readOnly ? 1 : 0, senderId);
+    prevSenderId =  senderId;
+    prevClientId = clientId;
+    prevReqSeqNum = reqSeqNum;   
+  }
   if (stateTransfer->isCollectingState()) {
     LOG_INFO_F(GL,
                "ClientRequestMsg is ignored because this replica is collecting missing state from the other replicas");
