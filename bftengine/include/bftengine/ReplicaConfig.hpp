@@ -71,13 +71,19 @@ struct ReplicaConfig {
   IThresholdSigner *thresholdSignerForOptimisticCommit = nullptr;
   IThresholdVerifier *thresholdVerifierForOptimisticCommit = nullptr;
 
+  bool debugPersistentStorageEnabled = false;
+
   // Messages
-  uint32_t maxExternalMessageSize = 1 << 16;
-  uint32_t maxReplyMessageSize = 1 << 13;
+  uint32_t maxExternalMessageSize = 65536;
+  uint32_t maxReplyMessageSize = 8192;
 
   // StateTransfer
-  uint32_t maxNumOfReservedPages = 1 << 11;
-  uint32_t sizeOfReservedPage = 1 << 12;
+  uint32_t maxNumOfReservedPages = 2048;
+  uint32_t sizeOfReservedPage = 4096;
+
+  // If set to true, this replica will periodically log debug statistics such as
+  // throughput and number of messages sent.
+  bool debugStatisticsEnabled = false;
 };
 
 }

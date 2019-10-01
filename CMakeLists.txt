@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
 
-# Default to building with clang on Linux,OSX,BSD etc...
-# This must come before the project definition or it won't be picked up.
 project(concord-bft VERSION 0.1.0.0 LANGUAGES CXX)
 
 #
@@ -33,6 +31,9 @@ option(BUILD_COMM_TCP_PLAIN "Enable TCP communication" FALSE)
 # Default BUILD_COMM_TCP_TLS to FALSE
 option(BUILD_COMM_TCP_TLS "Enable TCP TLS communication" FALSE)
 
+# This requires the rocksdb dependencies to be installed, so defaults to FALSE
+option(BUILD_ROCKSDB_STORAGE "Enable building of RocksDB storage library" FALSE)
+
 set(COMM_MODULES 0)
 if(BUILD_COMM_TCP_PLAIN)
     math(EXPR COMM_MODULES "${COMM_MODULES}+1")
@@ -62,7 +63,7 @@ string(APPEND CXX_FLAGS " -Wbuiltin-macro-redefined")
 if(IS_LEAKCHECK)
     string(APPEND CXX_FLAGS " -fsanitize=leak")
 endif()
-#string(APPEND CXX_FLAGS " -Werror")
+string(APPEND CXX_FLAGS " -Werror")
 #string(APPEND CXX_FLAGS " -Wextra")
 
 # TODO: Figure out right way to deal with -fstrict-overflow / -Wstrict-overflow related errors
@@ -70,7 +71,7 @@ endif()
 #    " -fno-strict-overflow")
 # Prevents some buffer overflows: https://access.redhat.com/blogs/766093/posts/1976213
 string(APPEND CXX_FLAGS_DEBUG
-        " -D_FORTIFY_SOURCE=2")
+        " -D_FORTIFY_SOURCE=2 -O")
 
 # GCC and clang-specific options
 string(APPEND CMAKE_CXX_FLAGS
@@ -151,6 +152,7 @@ add_subdirectory(util)
 add_subdirectory(threshsign)
 add_subdirectory(bftengine)
 add_subdirectory(tools)
+add_subdirectory(storage)
 
 #
 # Setup testing

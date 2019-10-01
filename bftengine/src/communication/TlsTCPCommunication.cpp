@@ -243,6 +243,13 @@ class AsyncTlsConnection : public
     return it->second.isReplica;
   }
 
+  void set_no_delay() {
+    asio::ip::tcp::no_delay option;
+    get_socket().set_option(boost::asio::ip::tcp::no_delay(true));
+    get_socket().get_option(option);
+    assert(true == option.value());
+  }
+
   /**
    * returns message length - first 4 bytes of the buffer
    * @param buffer Data received from the stream
@@ -271,7 +278,7 @@ class AsyncTlsConnection : public
    * this method closes the socket and frees the object by calling the _fOnError
    * we rely on boost cleanup and do not shutdown ssl and sockets explicitly
    */
-  void dispose_connection() {
+  void dispose_connection(bool remove) {
     if (_disposed)
       return;
 
@@ -291,7 +298,13 @@ class AsyncTlsConnection : public
 
     // We use _expectedDestId here instead of _destId, because _destId may not
     // be set yet, if the connection failed before authentication completes.
-    _fOnError(_expectedDestId);
+    if(remove) {
+      _fOnError(_expectedDestId);
+    }
+
+    _receiver = nullptr;
+    _fOnError = nullptr;
+    _fOnTlsReady = nullptr;
   }
 
   /**
@@ -313,7 +326,7 @@ class AsyncTlsConnection : public
       }
     }
 
-    dispose_connection();
+    dispose_connection(true);
   }
   /// ****************** cleanup functions* end ******************* ///
 
@@ -659,7 +672,7 @@ class AsyncTlsConnection : public
       LOG_DEBUG(_logger, "connected, node " << _selfId
                                             << ", dest: " << _expectedDestId
                                             << ", res: " << res);
-
+      set_no_delay();
       _socket->async_handshake(boost::asio::ssl::stream_base::client,
                                boost::bind(
                                    &AsyncTlsConnection::on_handshake_complete_outbound,
@@ -688,7 +701,7 @@ class AsyncTlsConnection : public
     }
     // check if the handle is not a result of calling expire_at()
     if(ec != boost::asio::error::operation_aborted) {
-      dispose_connection();
+      dispose_connection(true);
     }
   }
 
@@ -872,7 +885,7 @@ class AsyncTlsConnection : public
     }
     // check if we the handle is not a result of calling expire_at()
     if(ec != boost::asio::error::operation_aborted) {
-      dispose_connection();
+      dispose_connection(true);
     }
   }
 
@@ -907,7 +920,7 @@ class AsyncTlsConnection : public
     }
     bool err = was_error(ec, "async_write_complete");
     if(err) {
-      dispose_connection();
+      dispose_connection(true);
       return;
     }
 
@@ -970,6 +983,7 @@ class AsyncTlsConnection : public
   }
 
   void start() {
+    set_no_delay();
     _socket->async_handshake(boost::asio::ssl::stream_base::server,
                              boost::bind(&AsyncTlsConnection::on_handshake_complete_inbound,
                                          shared_from_this(),
@@ -1056,14 +1070,16 @@ class AsyncTlsConnection : public
   }
 
   virtual ~AsyncTlsConnection() {
-    LOG_INFO(_logger, "Dtor called, node: " << _selfId << "peer: " << _destId << ", type: " <<
+    LOG_DEBUG(_logger, "Dtor called, node: " << _selfId << "peer: " << _destId << ", type: " <<
                                             _connType);
 
     delete[] _inBuffer;
 
-    _receiver = nullptr;
-    _fOnError = nullptr;
-    _fOnTlsReady = nullptr;
+    
+  }
+
+  void dispose() {
+    dispose_connection(false);
   }
 };
 
@@ -1305,7 +1321,7 @@ class TlsTCPCommunication::TlsTcpImpl :
       _pAcceptor = boost::make_unique<asio::ip::tcp::acceptor>(_service, ep);
       start_accept();
     } else // clients don't listen
-    LOG_INFO(_logger, "skipping listen for node: " << _selfId);
+    LOG_DEBUG(_logger, "skipping listen for node: " << _selfId);
 
     // this node should connect only to nodes with lower ID
     // and all nodes with higher ID will connect to this node
@@ -1348,10 +1364,20 @@ class TlsTCPCommunication::TlsTcpImpl :
     }
 
     _service.stop();
-    _pIoThread->join();
+    if(_pIoThread->joinable()) {
+      _pIoThread->join();
+    }
+    _pIoThread = nullptr;
+
+    if(_pAcceptor) {
+      _pAcceptor->close();
+    }
+
+    for (auto it = _connections.begin(); it != _connections.end(); it++) {
+      it->second->dispose();
+    }
 
     _connections.clear();
-
     return 0;
   }
 
@@ -1400,7 +1426,7 @@ class TlsTCPCommunication::TlsTcpImpl :
   }
 
   ~TlsTcpImpl() {
-    LOG_DEBUG(_logger, "TlsTCPDtor");
+    LOG_DEBUG(_logger, "TlsTcpImpl dtor");
     _pIoThread = nullptr;
   }
 };
