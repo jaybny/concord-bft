@@ -53,12 +53,13 @@ def interesting_configs(selected=None):
     if selected is None:
         selected=lambda *config: True
 
-    bft_configs = [{'n': 4, 'f': 1, 'c': 0, 'num_clients': 30},
-                   {'n': 6, 'f': 1, 'c': 1, 'num_clients': 30},
-                   {'n': 7, 'f': 2, 'c': 0, 'num_clients': 30},
+    bft_configs = [{'n': 4, 'f': 1, 'c': 0, 'num_clients': 1},
+                #    {'n': 6, 'f': 1, 'c': 1, 'num_clients': 1},
+                #    {'n': 7, 'f': 2, 'c': 0, 'num_clients': 1},
                    # {'n': 9, 'f': 2, 'c': 1, 'num_clients': 30}
                    # {'n': 12, 'f': 3, 'c': 1, 'num_clients': 30}
                    ]
+
 
     selected_bft_configs = \
         [conf for conf in bft_configs
@@ -226,16 +227,24 @@ class BftTestNetwork:
         args.extend(["-o", self.config.key_file_prefix])
         subprocess.run(args, check=True)
 
+        # create TLS certificates
+        keygen = os.path.join(self.toolsdir, "create_tls_certs.sh")
+        cmd = [keygen, str(self.config.num_clients+self.config.n+self.config.num_ro_replicas), "certs"]
+        # cmd = [os.path.join(seld.toolsdir, "create_tls_certs.sh"), , "certs"]
+        print(f'Yehuda create_tls_certs {cmd} {self.config.n} {self.config.num_clients}')
+        subprocess.run(cmd)
+
+
     def _create_clients(self):
         for client_id in range(self.config.n + self.config.num_ro_replicas,
                                self.config.num_clients+self.config.n + self.config.num_ro_replicas):
             config = self._bft_config(client_id)
-            self.clients[client_id] = bft_client.UdpClient(config, self.replicas)
+            self.clients[client_id] = bft_client.TlsClient(config, self.replicas)
 
     async def new_client(self):
         client_id = max(self.clients.keys()) + 1
         config = self._bft_config(client_id)
-        client = bft_client.UdpClient(config, self.replicas)
+        client = bft_client.TlsClient(config, self.replicas)
         self.clients[client_id] = client
         return client
 

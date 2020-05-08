@@ -46,6 +46,14 @@ class SkvbcTest(unittest.TestCase):
 
     @with_trio
     @with_bft_network(start_replica_cmd)
+    async def test_tls(self, bft_network):
+        bft_network.start_all_replicas()
+        client = bft_network.random_client()
+        msg = kvbc.SimpleKVBCProtocol.get_last_block_req()
+        await client.read(msg)
+
+    @with_trio
+    @with_bft_network(start_replica_cmd)
     async def test_checkpoint_creation(self, bft_network):
         """
         Test the creation of checkpoints (independently of state transfer or view change)

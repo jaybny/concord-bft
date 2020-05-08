@@ -25,7 +25,7 @@ import bft_config
 # This requires python 3.5 for subprocess.run
 class SimpleTest(unittest.TestCase):
     """
-    Test a UDP client against simpleTest servers
+    Test a TLS client against simpleTest servers
 
     Use n=4, f=1, c=0
     """
@@ -52,7 +52,7 @@ class SimpleTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self):
-        shutil.rmtree(self.testdir)
+        # shutil.rmtree(self.testdir)
         os.chdir(self.origdir)
 
     @classmethod
@@ -61,6 +61,11 @@ class SimpleTest(unittest.TestCase):
         keygen = os.path.join(cls.toolsdir, "GenerateConcordKeys")
         args = [keygen, "-n", "4", "-f", "1", "-o", "private_replica_"]
         subprocess.run(args, check=True)
+
+        # create TLS certificates
+        cmd = [os.path.join(cls.toolsdir, "create_tls_certs.sh"), "5", "certs"]
+        subprocess.call(cmd)
+
 
     def readRequest(self):
         """Serialize a read request"""
@@ -83,9 +88,9 @@ class SimpleTest(unittest.TestCase):
 
     async def _testTimeout(self, msg, read_only):
        config = self.config._replace(req_timeout_milli=100)
-       with bft_client.UdpClient(config, self.replicas) as udp_client:
+       with bft_client.TlsClient(config, self.replicas) as tls_client:
            with self.assertRaises(trio.TooSlowError):
-               await udp_client.sendSync(msg, read_only)
+               await tls_client.sendSync(msg, read_only)
 
     def startServers(self):
         """Start all 4 simpleTestServers"""
@@ -101,6 +106,7 @@ class SimpleTest(unittest.TestCase):
     def testReadWrittenValue(self):
         """Write a value and then read it"""
         self.startServers()
+        # trio.sleep(2)
         try:
             trio.run(self._testReadWrittenValue)
         except:
@@ -108,11 +114,12 @@ class SimpleTest(unittest.TestCase):
         finally:
             self.stopServers()
 
-    async def _testReadWrittenValue(self):
+    async def _testReadWrittenValue(self): 
+       await trio.sleep(10)
        val = 999
-       with bft_client.UdpClient(self.config, self.replicas) as udp_client:
-           await udp_client.sendSync(self.writeRequest(val), False)
-           read = await udp_client.sendSync(self.readRequest(), True)
+       with bft_client.TlsClient(self.config, self.replicas) as tls_client:
+           await tls_client.sendSync(self.writeRequest(val), False)
+           read = await tls_client.sendSync(self.readRequest(), True)
            self.assertEqual(val, self.read_val(read))
 
     def testRetry(self):
@@ -137,11 +144,16 @@ class SimpleTest(unittest.TestCase):
         """Issue a write and ensure that a retry occurs"""
         config = self.config._replace(req_timeout_milli=5000)
         val = 1
-        with bft_client.UdpClient(config, self.replicas) as udp_client:
-           self.assertEqual(udp_client.retries, 0)
-           await udp_client.sendSync(self.writeRequest(val), False)
-           self.assertTrue(udp_client.retries > 0)
+        with bft_client.TlsClient(config, self.replicas) as tls_client:
+           self.assertEqual(tls_client.retries, 0)
+           await tls_client.sendSync(self.writeRequest(val), False)
+           self.assertTrue(tls_client.retries > 0)
 
+    async def sleep(self, s):
+        # Retry timeout is 50ms
+        # This guarantees we wait at least one retry with high probability
+        await trio.sleep(s)
+    
     async def startServersWithDelay(self):
         # Retry timeout is 50ms
         # This guarantees we wait at least one retry with high probability
@@ -160,26 +172,27 @@ class SimpleTest(unittest.TestCase):
 
     async def _testPrimaryWrite(self):
        # Try to guarantee we don't retry accidentally
+       await trio.sleep(5)
        config = self.config._replace(retry_timeout_milli=500)
-       with bft_client.UdpClient(self.config, self.replicas) as udp_client:
-           self.assertEqual(None, udp_client.primary)
-           await udp_client.sendSync(self.writeRequest(1), False)
+       with bft_client.TlsClient(self.config, self.replicas) as tls_client:
+           self.assertEqual(None, tls_client.primary)
+           await tls_client.sendSync(self.writeRequest(1), False)
            # We know the servers are up once the write completes
-           self.assertNotEqual(None, udp_client.primary)
-           sent = udp_client.msgs_sent
-           read = await udp_client.sendSync(self.readRequest(), True)
+           self.assertNotEqual(None, tls_client.primary)
+           sent = tls_client.msgs_sent
+           read = await tls_client.sendSync(self.readRequest(), True)
            sent += 4
-           self.assertEqual(sent, udp_client.msgs_sent)
+           self.assertEqual(sent, tls_client.msgs_sent)
            self.assertEqual(1, self.read_val(read))
-           self.assertNotEqual(None, udp_client.primary)
-           await udp_client.sendSync(self.writeRequest(2), False)
+           self.assertNotEqual(None, tls_client.primary)
+           await tls_client.sendSync(self.writeRequest(2), False)
            sent += 1 # Only send to the primary
-           self.assertEqual(sent, udp_client.msgs_sent)
-           read = await udp_client.sendSync(self.readRequest(), True)
+           self.assertEqual(sent, tls_client.msgs_sent)
+           read = await tls_client.sendSync(self.readRequest(), True)
            sent += 4
-           self.assertEqual(sent, udp_client.msgs_sent)
+           self.assertEqual(sent, tls_client.msgs_sent)
            self.assertEqual(2, self.read_val(read))
-           self.assertNotEqual(None, udp_client.primary)
+           self.assertNotEqual(None, tls_client.primary)
 
 
 if __name__ == '__main__':
